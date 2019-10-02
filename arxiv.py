@@ -134,12 +134,14 @@ class Paper:
         """post process some of the columns in the pile
         1) convert dates to datetime datatype
         2) count the number of authors
+        3) split sub-categories into list of items
         """
         try:
             self.pile["created"] = pd.to_datetime(self.pile["created"])
             self.pile["updated"] = pd.to_datetime(self.pile["updated"])
             self.pile["datestamp"] = pd.to_datetime(self.pile["datestamp"])
             self.pile["n_authors"] = self.pile["author"].map(len)
+            self.pile.categories.apply(lambda x: x.split(" "))
         except KeyError:
             pass
 
