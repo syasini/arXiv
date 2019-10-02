@@ -141,7 +141,7 @@ class Paper:
             self.pile["updated"] = pd.to_datetime(self.pile["updated"])
             self.pile["datestamp"] = pd.to_datetime(self.pile["datestamp"])
             self.pile["n_authors"] = self.pile["author"].map(len)
-            self.pile.categories.apply(lambda x: x.split(" "))
+            self.pile["categories"] = self.pile["categories"].apply(lambda x: x.split(" "))
         except KeyError:
             pass
 
