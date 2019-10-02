@@ -277,7 +277,7 @@ class arXiv:
         self.url = "{base_url}from={from}&until={to}&metadataPrefix={metadataprefix}&set={" \
               "set}".format(**self.url_dict)
 
-        print(self.url)
+        #print(self.url)
 
         self.token = None
         self.resume_url = self.url
@@ -292,9 +292,9 @@ class arXiv:
         """
         Request records from url and pass through the skimmer object
         """
-        print(f"requesting records from {self.from_} to {self.to_} in the {self.set_} category")
+        print(f"requesting records from {self.from_} to {self.to_} in the {self.set_} category\n")
         while True:
-            print(f"request url: {self.resume_url}")
+            print(f"request url: {self.resume_url}\n")
 
             # get contents from resume_url
             response = requests.get(self.resume_url)
