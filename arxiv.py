@@ -277,8 +277,6 @@ class arXiv:
         self.url = "{base_url}from={from}&until={to}&metadataPrefix={metadataprefix}&set={" \
               "set}".format(**self.url_dict)
 
-        #print(self.url)
-
         self.token = None
         self.resume_url = self.url
         self.paper = paper
@@ -355,10 +353,6 @@ class arXiv:
         sleep(t)
 
 
-# class Soup(BeautifulSoup):
-#
-#     def find_resumptionToken(self):
-#         return
 if __name__ == "__main__":
     paper = Paper(set_="physics:astro-ph")
     arXiv(paper)
