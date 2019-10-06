@@ -14,8 +14,12 @@ import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
 from dateutil.parser import parse as parsedate
+from multiprocessing import Pool
+from copy import deepcopy
 
-
+###################################################
+#                     Paper
+###################################################
 class Paper:
     """Paper object contains the information of an individual record
 
@@ -151,7 +155,22 @@ class Paper:
             filename = self.get_file_name()
         if mode == "csv":
             self.pile.to_csv(filename)
+        else:
+            print("other file modes are not implemented at the moment.")
 
+
+    def load_from_file(self, filename=None, mode="csv"):
+        """load the paper pile from a file"""
+        if filename is None:
+            filename = self.get_file_name()
+        if mode == "csv":
+            self.pile = pd.read_csv(filename, index_col=0)
+        else:
+            print("other file modes are not implemented at the moment.")
+
+###################################################
+#                     Skimmer
+###################################################
 
 class Skimmer:
     """
@@ -224,6 +243,10 @@ class Skimmer:
             paper.pile = paper.pile.append(paper.single, ignore_index=True)
 
 
+###################################################
+#                     arXiv
+###################################################
+
 class arXiv:
     """Scraper object downloads and decodes the records based on user request
 
@@ -256,7 +279,7 @@ class arXiv:
     """
 
     BASE_URL = "http://export.arxiv.org/oai2?verb=ListRecords&"
-    METADATAPREFIX = "arXiv"  # link to the arXiv halp page
+    METADATAPREFIX = "arXiv"  # link to the arXiv help page
 
     def __init__(self,
                  paper,
@@ -352,6 +375,115 @@ class arXiv:
         print(f"sleeping for {t} seconds...\n")
         sleep(t)
 
+
+
+###################################################
+#                     inSPIRE
+###################################################
+
+class inSPIRE:
+    """Scraper object for extracting citations from inSPIRE"""
+
+    # http://inspirehep.net/info/hep/api
+    BASE_URL = "http://inspirehep.net/search?p=" \
+               "refersto:{arxiv_id}&" \
+               "of={output_format}&" \
+               "rg={records_in_group}&" \
+               "jrec={jump_to_record}"
+
+    def __init__(self,
+                 paper,
+                 output_format="hx",
+                 records_in_group=250,
+                 jump_to_record=1,
+                 n_chunks=1,
+                 ):
+
+        self.paper = paper
+        self.n = n_chunks
+
+        self.url_dict = {
+            "arxiv_id": None,
+            "base_url": self.BASE_URL,
+            "output_format": output_format,
+            "records_in_group": records_in_group,
+            "jump_to_record": jump_to_record,
+            }
+
+        self.get_citations()
+
+    def get_citations(self):
+        with Pool(processes=self.n) as pool:
+            pile_chunk = np.array_split(self.paper.pile, self.n)
+            n_citations = pool.map(self._harvest_chunk_citations, pile_chunk)
+            n_citations = pd.concat(n_citations)
+
+        self.paper.pile["n_citations"] = n_citations
+
+    def _harvest_chunk_citations(self, chunk):
+
+        #self.paper.pile["n_citations"] = \
+        return chunk.apply(lambda record: self.harvest(record), axis=1)
+
+    @staticmethod
+    def _make_soup(response):
+        """make beautifulsoup with the url response"""
+        soup = BeautifulSoup(response.text, "xml")
+
+        return soup
+
+    @staticmethod
+    def _count_citations_in(soup):
+        """count the number of citations in the soup object"""
+
+        citations = soup.find_all("pre")
+        return len(citations)
+
+
+    def harvest(self, record):
+
+        tot_citations = 0
+        there_is_more = True
+        # construct the request url address
+        url_dict = deepcopy(self.url_dict)
+
+        url_dict["arxiv_id"] = record["id"]
+        url = self.BASE_URL.format(**url_dict)
+
+        while there_is_more:
+
+
+            response = requests.get(url)
+            print("arxiv_id: {arxiv_id}\n").format(**url_dict)
+            print(f"response ok? : {response.ok}\n")
+
+            # if no errors occurred, make soup with the record
+            if response.ok:
+                soup = self._make_soup(response)
+
+                # TODO: search soup for error
+
+                # count the citing records in the soup
+                citations = self._count_citations_in(soup)
+                tot_citations += citations
+
+                # if tokens found, add then to BASE_URL and continue downloading records
+                if citations > 0:
+                    there_is_more = True
+                    url_dict["jump_to_record"] = url_dict["records_in_group"]
+                    url = self.BASE_URL.format(**url_dict)
+                else:
+                    there_is_more = False
+
+            # if received a 503 error, sleep for the amount indicated in the error
+            #elif response.status_code == 503:
+            #    self.sleep_off_503(response.text)
+            # if response was not "ok", print the message
+            else:
+                print(f"response.text = {response.text}")
+                break
+
+        return tot_citations
 
 if __name__ == "__main__":
     paper = Paper(set_="physics:astro-ph")
