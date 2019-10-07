@@ -415,6 +415,7 @@ class inSPIRE:
     def get_citations(self):
         with Pool(processes=self.n) as pool:
             pile_chunk = np.array_split(self.paper.pile, self.n)
+            print("chunk_len = {}".format(len(pile_chunk)))
             n_citations = pool.map(self._harvest_chunk_citations, pile_chunk)
             n_citations = pd.concat(n_citations)
 
@@ -454,7 +455,7 @@ class inSPIRE:
 
 
             response = requests.get(url)
-            print("arxiv_id: {arxiv_id}\n").format(**url_dict)
+            print("arxiv_id: {arxiv_id}\n".format(**url_dict))
             print(f"response ok? : {response.ok}\n")
 
             # if no errors occurred, make soup with the record
