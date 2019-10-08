@@ -2,7 +2,7 @@
 A parallel scraper designed for scraping arXiv and inspirehep records
 """
 
-__author__ = "Siavash Yasini"
+__author__ = "Siavash Yasini, Amin Oji"
 __email__ = "siavash.yasini@gmail.com"
 
 import requests
@@ -14,12 +14,13 @@ import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
 from dateutil.parser import parse as parsedate
-from multiprocessing import Pool
+from multiprocessing import Pool, cpu_count
 from copy import deepcopy
 
 ###################################################
 #                     Paper
 ###################################################
+
 class Paper:
     """Paper object contains the information of an individual record
 
@@ -54,6 +55,9 @@ class Paper:
     -------
 
     """
+    def __repr__(self):
+        return f"Papers from {self.from_} to {self.to_} in the {self.set_} category"
+
     def __init__(self,
                  from_=None,
                  to_=None,
@@ -155,9 +159,9 @@ class Paper:
             filename = self.get_file_name()
         if mode == "csv":
             self.pile.to_csv(filename)
+            print(f"pile saved to \n{filename}")
         else:
             print("other file modes are not implemented at the moment.")
-
 
     def load_from_file(self, filename=None, mode="csv"):
         """load the paper pile from a file"""
@@ -165,8 +169,10 @@ class Paper:
             filename = self.get_file_name()
         if mode == "csv":
             self.pile = pd.read_csv(filename, index_col=0)
+            print(f"pile loaded from \n{filename}")
         else:
             print("other file modes are not implemented at the moment.")
+
 
 ###################################################
 #                     Skimmer
@@ -283,7 +289,7 @@ class arXiv:
 
     def __init__(self,
                  paper,
-                 n=1,):
+                 ):
 
         self.from_ = paper.from_
         self.to_ = paper.to_
@@ -302,19 +308,25 @@ class arXiv:
 
         self.token = None
         self.resume_url = self.url
+
+        # instantiate the paper and skimmer objects
         self.paper = paper
         self.skimmer = Skimmer(self.paper)
 
+        # harvest arXiv and extract papers and process them
         self.harvest()
         self.skimmer.scoop()
         self.skimmer.skim(self.paper)
+        self.paper.process()
 
     def harvest(self):
         """
         Request records from url and pass through the skimmer object
         """
         print(f"requesting records from {self.from_} to {self.to_} in the {self.set_} category\n")
-        while True:
+
+        there_is_more = True
+        while there_is_more:
             print(f"request url: {self.resume_url}\n")
 
             # get contents from resume_url
@@ -337,7 +349,7 @@ class arXiv:
                 if token is not None:
                     self.resume_url = self.BASE_URL + "resumptionToken={}".format(token.text)
                 else:
-                    break
+                    there_is_more = False
             # if received a 503 error, sleep for the amount indicated in the error
             elif response.status_code == 503:
                 self.sleep_off_503(response.text)
@@ -382,9 +394,25 @@ class arXiv:
 ###################################################
 
 class inSPIRE:
-    """Scraper object for extracting citations from inSPIRE"""
+    """Scraper object for extracting citations from inSPIRE
 
-    # http://inspirehep.net/info/hep/api
+    Attributes
+    ----------
+
+    paper: object
+        Instance of the Paper class:
+    n_chunks: int
+        Number of chunks to scrape in parallel
+    url_dict: dictionary
+        Contains parameters for request url
+
+    Methods
+    -------
+
+
+    """
+
+    # api instructions: http://inspirehep.net/info/hep/api
     BASE_URL = "http://inspirehep.net/search?p=" \
                "refersto:{arxiv_id}&" \
                "of={output_format}&" \
@@ -396,11 +424,16 @@ class inSPIRE:
                  output_format="hx",
                  records_in_group=250,
                  jump_to_record=1,
-                 n_chunks=1,
+                 n_chunks=-1,
+                 verbose=False,
                  ):
 
         self.paper = paper
-        self.n = n_chunks
+        self.n_chunks = n_chunks
+        if self.n_chunks == -1:
+            self.n_chunks = cpu_count()
+        self.timer = 0 # counter for occasional printouts
+        self.verbose = verbose
 
         self.url_dict = {
             "arxiv_id": None,
@@ -413,17 +446,22 @@ class inSPIRE:
         self.get_citations()
 
     def get_citations(self):
-        with Pool(processes=self.n) as pool:
-            pile_chunk = np.array_split(self.paper.pile, self.n)
-            print("chunk_len = {}".format(len(pile_chunk)))
+        """get all citations for records in the paper.pile"""
+        print("Running...")
+        self.timer += 1
+
+        with Pool(processes=self.n_chunks) as pool:
+            pile_chunk = np.array_split(self.paper.pile, self.n_chunks)
+            print("Splitting the data into {} chunks...\n".format(len(pile_chunk)))
             n_citations = pool.map(self._harvest_chunk_citations, pile_chunk)
             n_citations = pd.concat(n_citations)
 
         self.paper.pile["n_citations"] = n_citations
+        print("Done!")
 
     def _harvest_chunk_citations(self, chunk):
+        """harvest inSPIRE citations for the records in the given chunk"""
 
-        #self.paper.pile["n_citations"] = \
         return chunk.apply(lambda record: self.harvest(record), axis=1)
 
     @staticmethod
@@ -440,23 +478,30 @@ class inSPIRE:
         citations = soup.find_all("pre")
         return len(citations)
 
-
     def harvest(self, record):
+        """find all papers that refersto:%record['id'] on inSPIRE"""
 
         tot_citations = 0
         there_is_more = True
+
         # construct the request url address
         url_dict = deepcopy(self.url_dict)
 
+        # plug in the arxiv_id and update the request url address
         url_dict["arxiv_id"] = record["id"]
         url = self.BASE_URL.format(**url_dict)
 
         while there_is_more:
 
+            if self.timer % 50 == 0:
+                print("Still Running...")
+            self.timer += 1
 
             response = requests.get(url)
-            print("arxiv_id: {arxiv_id}\n".format(**url_dict))
-            print(f"response ok? : {response.ok}\n")
+
+            if self.verbose:
+                print("arxiv_id: {arxiv_id}\n".format(**url_dict))
+                print(f"response ok? : {response.ok}\n")
 
             # if no errors occurred, make soup with the record
             if response.ok:
@@ -466,16 +511,24 @@ class inSPIRE:
 
                 # count the citing records in the soup
                 citations = self._count_citations_in(soup)
+
+                if self.verbose:
+                    print(f"got {citations} citations (total={tot_citations}) for"
+                          f" {url_dict['arxiv_id']}")
+
                 tot_citations += citations
 
                 # if tokens found, add then to BASE_URL and continue downloading records
                 if citations > 0:
                     there_is_more = True
-                    url_dict["jump_to_record"] = url_dict["records_in_group"]
+                    # add +jr to the rg keyword in the url address and search again
+                    url_dict["jump_to_record"] += url_dict["records_in_group"]
                     url = self.BASE_URL.format(**url_dict)
+                    #print(f"url = {url}")
                 else:
                     there_is_more = False
 
+            #TODO: remove this
             # if received a 503 error, sleep for the amount indicated in the error
             #elif response.status_code == 503:
             #    self.sleep_off_503(response.text)
