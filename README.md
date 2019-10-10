@@ -8,6 +8,8 @@
 [![email](https://img.shields.io/badge/email-siavash.yasini%40gmail.com-lightgrey)](mailto:siavash.yasini@gmail.com)
 
 
+![logo](logo.png)
+
 a python code for scraping arXiv and inSPIRE-HEP.
 
 This code has been inspired by [Analysing the arXiv](http://betatim.github.io/posts/analysing-the-arxiv/#factoid), a fantastic article by Tim Head. 
