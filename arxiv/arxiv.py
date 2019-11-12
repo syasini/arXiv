@@ -64,7 +64,8 @@ class Paper:
                  set_="physics:astro-ph",
                  fields="everything"):
 
-        self.set_dict = ["physics:astro-ph"]
+        # find the available set_specs
+        self.setspec_dict = self.get_setspecs()
 
         # check the from_ date
         if from_ is None:
@@ -79,9 +80,9 @@ class Paper:
             self.to_ = self.check_date_format(to_)
 
         # check the main category setSpec
-        if set_ not in self.set_dict:
+        if set_ not in self.setspec_dict:
             raise ValueError("Please select one of the following values for set_\n\n{}".format(
-                self.set_dict))
+                self.setspec_dict))
         else:
             self.set_ = set_
 
@@ -112,6 +113,17 @@ class Paper:
 
         # make a dataframe for storing all the harvested papers
         self.pile = pd.DataFrame(columns=self.field)
+
+    def get_setspecs(self):
+        """get all the available setSpecs from arXiv"""
+
+        response = requests.get("http://export.arxiv.org/oai2?verb=ListSets")
+        soup = BeautifulSoup(response.text)
+
+        setspecs = soup.find_all("setspec")
+        setspecs = [item.text for item in setspecs]
+
+        return setspecs
 
     @staticmethod
     def days_back(i):
@@ -447,7 +459,7 @@ class inSPIRE:
 
     def get_citations(self):
         """get all citations for records in the paper.pile"""
-        print("Running...")
+        print("Running....")
         self.timer += 1
 
         with Pool(processes=self.n_chunks) as pool:
@@ -535,7 +547,8 @@ class inSPIRE:
             # if response was not "ok", print the message
             else:
                 print(f"response.text = {response.text}")
-                break
+                sleep(60)
+                #break
 
         return tot_citations
 
