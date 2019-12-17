@@ -16,7 +16,8 @@ from datetime import datetime, timedelta
 from dateutil.parser import parse as parsedate
 from multiprocessing import Pool, cpu_count
 from copy import deepcopy
-
+from tqdm.auto import tqdm
+#tqdm.pandas()
 ###################################################
 #                     Paper
 ###################################################
@@ -113,6 +114,10 @@ class Paper:
 
         # make a dataframe for storing all the harvested papers
         self.pile = pd.DataFrame(columns=self.field)
+
+    @property
+    def n_count(self):
+        return len(self.pile.index)
 
     def get_setspecs(self):
         """get all the available setSpecs from arXiv"""
@@ -331,6 +336,10 @@ class arXiv:
         self.skimmer.skim(self.paper)
         self.paper.process()
 
+        # count the number of times unknown error occurs
+        # this will be used later to sleep off unexpected errors
+        self.error_counter = 0
+
     def harvest(self):
         """
         Request records from url and pass through the skimmer object
@@ -339,40 +348,47 @@ class arXiv:
 
         there_is_more = True
         while there_is_more:
-            print(f"request url: {self.resume_url}\n")
 
-            # get contents from resume_url
-            response = requests.get(self.resume_url)
-            print(f"response ok? : {response.ok}\n")
+            try:
+                print(f"request url: {self.resume_url}\n")
 
-            # if no errors occurred, make soup with the record
-            if response.ok:
-                soup = self.make_soup(response)
+                # get contents from resume_url
+                response = requests.get(self.resume_url)
+                print(f"response ok? : {response.ok}\n")
 
-                #TODO: search soup for error
+                # if no errors occurred, make soup with the record
+                if response.ok:
+                    soup = self.make_soup(response)
 
-                #TODO: apply pool on pandas dataframe?
+                    #TODO: search soup for error
 
-                self.skimmer.add_to_pot(soup)
+                    #TODO: apply pool on pandas dataframe?
 
-                # check the soup for a resumption token
-                token = self.check_for_token(soup)
-                # if tokens found, add then to BASE_URL and continue downloading records
-                if token is not None:
-                    self.resume_url = self.BASE_URL + "resumptionToken={}".format(token.text)
+                    self.skimmer.add_to_pot(soup)
+
+                    # check the soup for a resumption token
+                    token = self.check_for_token(soup)
+                    # if tokens found, add then to BASE_URL and continue downloading records
+                    if token is not None:
+                        self.resume_url = self.BASE_URL + "resumptionToken={}".format(token.text)
+                    else:
+                        there_is_more = False
+                # if received a 503 error, sleep for the amount indicated in the error
+                elif response.status_code == 503:
+                    self.sleep_off_503(response.text)
+                # if response was not "ok", print the message
                 else:
-                    there_is_more = False
-            # if received a 503 error, sleep for the amount indicated in the error
-            elif response.status_code == 503:
-                self.sleep_off_503(response.text)
-            # if response was not "ok", print the message
-            else:
-                print(f"response.text = {response.text}")
-                break
+                    print(f"response.text = {response.text}")
+                    self.cool_off()
+
+            except:
+                # handle unexpected errors by cooling off for a while
+                self.cool_off()
 
     @staticmethod
     def make_soup(response):
         """make beautifulsoup with the url response"""
+
         soup = BeautifulSoup(response.text, "xml")
 
         return soup
@@ -380,6 +396,7 @@ class arXiv:
     @staticmethod
     def check_for_token(soup):
         """check the soup for resumption token"""
+
         try:
             token = soup.find('ListRecords').find("resumptionToken")
             print("token=", token.text)
@@ -392,14 +409,21 @@ class arXiv:
     @staticmethod
     def sleep_off_503(text):
         """sleep for the amount indicated in the text"""
+
         error_pattern = "[\s\S]*?Retry after (\d+) seconds[\s\S]*"
-        print(text)
+        print(f"{'':*>30}\n{text}\n{'':*>30}")
         t = re.match(error_pattern, text)
         t = int(t[1])
         print(f"sleeping for {t} seconds...\n")
         sleep(t)
 
+    def cool_off(self):
+        """sleep for a while and hope the error will go away..."""
 
+        self.error_counter += 1
+        t = self.error_counter * 60
+        print(f"sleeping for {t} seconds...\n")
+        sleep(t)
 
 ###################################################
 #                     inSPIRE
@@ -431,6 +455,8 @@ class inSPIRE:
                "rg={records_in_group}&" \
                "jrec={jump_to_record}"
 
+    #TODO: Add pbar and timer here?
+
     def __init__(self,
                  paper,
                  output_format="hx",
@@ -445,6 +471,7 @@ class inSPIRE:
         if self.n_chunks == -1:
             self.n_chunks = cpu_count()
         self.timer = 0 # counter for occasional printouts
+        #self.pbar = tqdm(total=100)
         self.verbose = verbose
 
         self.url_dict = {
@@ -455,12 +482,20 @@ class inSPIRE:
             "jump_to_record": jump_to_record,
             }
 
+        #with tqdm(total=self.paper.n_count) as pbar:
+            #self.pbar = pbar
+
         self.get_citations()
+
+        # count the number of times unknown error occurs
+        # this will be used later to sleep off unexpected errors
+        self.error_counter = 0
 
     def get_citations(self):
         """get all citations for records in the paper.pile"""
         print("Running....")
-        self.timer += 1
+        #self.pbar.update(1)
+        #self.timer += 1
 
         with Pool(processes=self.n_chunks) as pool:
             pile_chunk = np.array_split(self.paper.pile, self.n_chunks)
@@ -474,7 +509,7 @@ class inSPIRE:
     def _harvest_chunk_citations(self, chunk):
         """harvest inSPIRE citations for the records in the given chunk"""
 
-        return chunk.apply(lambda record: self.harvest(record), axis=1)
+        return chunk.apply(self.harvest, axis=1)
 
     @staticmethod
     def _make_soup(response):
@@ -492,6 +527,9 @@ class inSPIRE:
 
     def harvest(self, record):
         """find all papers that refersto:%record['id'] on inSPIRE"""
+        if self.timer % 100 == 0:
+            print(f"fetched citations for {self.timer} papers...")
+        self.timer += 1
 
         tot_citations = 0
         there_is_more = True
@@ -502,55 +540,64 @@ class inSPIRE:
         # plug in the arxiv_id and update the request url address
         url_dict["arxiv_id"] = record["id"]
         url = self.BASE_URL.format(**url_dict)
-
+        #self.pbar.update(1)
         while there_is_more:
+            try:
 
-            if self.timer % 50 == 0:
-                print("Still Running...")
-            self.timer += 1
-
-            response = requests.get(url)
-
-            if self.verbose:
-                print("arxiv_id: {arxiv_id}\n".format(**url_dict))
-                print(f"response ok? : {response.ok}\n")
-
-            # if no errors occurred, make soup with the record
-            if response.ok:
-                soup = self._make_soup(response)
-
-                # TODO: search soup for error
-
-                # count the citing records in the soup
-                citations = self._count_citations_in(soup)
+                response = requests.get(url)
 
                 if self.verbose:
-                    print(f"got {citations} citations (total={tot_citations}) for"
-                          f" {url_dict['arxiv_id']}")
+                    print("arxiv_id: {arxiv_id}\n".format(**url_dict))
+                    print(f"response ok? : {response.ok}\n")
 
-                tot_citations += citations
+                # if no errors occurred, make soup with the record
+                if response.ok:
+                    soup = self._make_soup(response)
 
-                # if tokens found, add then to BASE_URL and continue downloading records
-                if citations > 0:
-                    there_is_more = True
-                    # add +jr to the rg keyword in the url address and search again
-                    url_dict["jump_to_record"] += url_dict["records_in_group"]
-                    url = self.BASE_URL.format(**url_dict)
-                    #print(f"url = {url}")
+                    # TODO: search soup for error
+
+                    # count the citing records in the soup
+                    citations = self._count_citations_in(soup)
+
+                    if self.verbose:
+                        print(f"got {citations} citations (total={tot_citations}) for"
+                              f" {url_dict['arxiv_id']}")
+
+                    tot_citations += citations
+
+                    # if citations found, add then to BASE_URL and continue downloading records
+                    if citations > 0:
+                        there_is_more = True
+                        # add +jr to the rg keyword in the url address and search again
+                        url_dict["jump_to_record"] += url_dict["records_in_group"]
+                        url = self.BASE_URL.format(**url_dict)
+                        #print(f"url = {url}")
+                    else:
+                        there_is_more = False
+
+                #TODO: remove this
+                # if received a 503 error, sleep for the amount indicated in the error
+                #elif response.status_code == 503:
+                #    self.sleep_off_503(response.text)
+                # if response was not "ok", print the message
                 else:
-                    there_is_more = False
+                    print(f"response.text = {response.text}")
+                    self.cool_off()
 
-            #TODO: remove this
-            # if received a 503 error, sleep for the amount indicated in the error
-            #elif response.status_code == 503:
-            #    self.sleep_off_503(response.text)
-            # if response was not "ok", print the message
-            else:
-                print(f"response.text = {response.text}")
-                sleep(60)
-                #break
+            except Exception as exc:
+                print(exc)
+                # handle unexpected errors by cooling off for a while
+                self.cool_off()
 
         return tot_citations
+
+    def cool_off(self):
+        """sleep for a while and hope the error will go away..."""
+
+        #self.error_counter += 1
+        t = 60
+        print(f"sleeping for {t} seconds...\n")
+        sleep(t)
 
 if __name__ == "__main__":
     paper = Paper(set_="physics:astro-ph")
