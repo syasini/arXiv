@@ -1,4 +1,4 @@
-# arxivester: arXiv (+inSPIRE) Harvester
+# arxivester: arXiv (+inSPIRE) harvester
 
 
 [![author](https://img.shields.io/badge/author-syasini-red)](https://github.com/syasini)
