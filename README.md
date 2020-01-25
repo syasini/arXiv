@@ -1,4 +1,4 @@
-# arXiv (+inSPIRE) Harvester
+# arxivester: arXiv (+inSPIRE) Harvester
 
 
 [![author](https://img.shields.io/badge/author-syasini-red)](https://github.com/syasini)
@@ -19,7 +19,7 @@ In order to install `arXiv` run the following in the terminal:
 
 `git clone https://github.com/syasini/arXiv.git`
 
-`cd arXiv` 
+`cd arXiv-harvester` 
 
 `pip install .`
 
