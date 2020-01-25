@@ -17,7 +17,7 @@ from dateutil.parser import parse as parsedate
 from multiprocessing import Pool, cpu_count
 from copy import deepcopy
 from tqdm.auto import tqdm
-#tqdm.pandas()
+tqdm.pandas()
 ###################################################
 #                     Paper
 ###################################################
@@ -509,7 +509,7 @@ class inSPIRE:
     def _harvest_chunk_citations(self, chunk):
         """harvest inSPIRE citations for the records in the given chunk"""
 
-        return chunk.apply(self.harvest, axis=1)
+        return chunk.progress_apply(self.harvest, axis=1)
 
     @staticmethod
     def _make_soup(response):
