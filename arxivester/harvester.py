@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from dateutil.parser import parse as parsedate
 from multiprocessing import Pool, cpu_count
 from copy import deepcopy
+import pdb
 from tqdm.auto import tqdm
 tqdm.pandas()
 ###################################################
@@ -326,6 +327,10 @@ class arXiv:
         self.token = None
         self.resume_url = self.url
 
+        # count the number of times unknown error occurs
+        # this will be used later to sleep off unexpected errors
+        self.error_counter = 0
+
         # instantiate the paper and skimmer objects
         self.paper = paper
         self.skimmer = Skimmer(self.paper)
@@ -335,10 +340,6 @@ class arXiv:
         self.skimmer.scoop()
         self.skimmer.skim(self.paper)
         self.paper.process()
-
-        # count the number of times unknown error occurs
-        # this will be used later to sleep off unexpected errors
-        self.error_counter = 0
 
     def harvest(self):
         """
@@ -351,7 +352,7 @@ class arXiv:
 
             try:
                 print(f"request url: {self.resume_url}\n")
-
+                #pdb.set_trace()
                 # get contents from resume_url
                 response = requests.get(self.resume_url)
                 print(f"response ok? : {response.ok}\n")
@@ -381,8 +382,9 @@ class arXiv:
                     print(f"response.text = {response.text}")
                     self.cool_off()
 
-            except:
+            except Exception as e:
                 # handle unexpected errors by cooling off for a while
+                print(e)
                 self.cool_off()
 
     @staticmethod
@@ -421,7 +423,7 @@ class arXiv:
         """sleep for a while and hope the error will go away..."""
 
         self.error_counter += 1
-        t = self.error_counter * 60
+        t = self.error_counter * 30
         print(f"sleeping for {t} seconds...\n")
         sleep(t)
 
@@ -447,7 +449,7 @@ class inSPIRE:
 
 
     """
-
+    timer = 0  # counter for occasional printouts
     # api instructions: http://inspirehep.net/info/hep/api
     BASE_URL = "http://inspirehep.net/search?p=" \
                "refersto:{arxiv_id}&" \
@@ -470,7 +472,7 @@ class inSPIRE:
         self.n_chunks = n_chunks
         if self.n_chunks == -1:
             self.n_chunks = cpu_count()
-        self.timer = 0 # counter for occasional printouts
+
         #self.pbar = tqdm(total=100)
         self.verbose = verbose
 
@@ -527,9 +529,9 @@ class inSPIRE:
 
     def harvest(self, record):
         """find all papers that refersto:%record['id'] on inSPIRE"""
-        if self.timer % 100 == 0:
+        if inSPIRE.timer % 100 == 0:
             print(f"fetched citations for {self.timer} papers...")
-        self.timer += 1
+        inSPIRE.timer += 1
 
         tot_citations = 0
         there_is_more = True
@@ -543,7 +545,7 @@ class inSPIRE:
         #self.pbar.update(1)
         while there_is_more:
             try:
-
+                #print(url)
                 response = requests.get(url)
 
                 if self.verbose:
