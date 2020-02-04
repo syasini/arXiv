@@ -18,6 +18,11 @@ from multiprocessing import Pool, cpu_count
 from copy import deepcopy
 import pdb
 from tqdm.auto import tqdm
+import logging
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
 tqdm.pandas()
 ###################################################
 #                     Paper
@@ -524,8 +529,11 @@ class inSPIRE:
     def _count_citations_in(soup):
         """count the number of citations in the soup object"""
 
-        citations = soup.find_all("pre")
-        return len(citations)
+        #citations = soup.find_all("pre")
+        citations = soup.find('td', class_="searchresultsboxheader",
+                                  align="center").strong.text
+
+        return int(citations)
 
     def harvest(self, record):
         """find all papers that refersto:%record['id'] on inSPIRE"""
@@ -546,6 +554,7 @@ class inSPIRE:
         while there_is_more:
             try:
                 #print(url)
+
                 response = requests.get(url)
 
                 if self.verbose:
@@ -559,21 +568,24 @@ class inSPIRE:
                     # TODO: search soup for error
 
                     # count the citing records in the soup
-                    citations = self._count_citations_in(soup)
+                    try:
+                        tot_citations = self._count_citations_in(soup)
+                    except Exception:
+                        logger.exception(f"something unexpected happened at {url}")
 
                     if self.verbose:
-                        print(f"got {citations} citations (total={tot_citations}) for"
+                        print(f"got {tot_citations} citations (total={tot_citations}) for"
                               f" {url_dict['arxiv_id']}")
 
-                    tot_citations += citations
+                    #tot_citations += citations
 
                     # if citations found, add then to BASE_URL and continue downloading records
-                    if citations > 0:
-                        there_is_more = True
-                        # add +jr to the rg keyword in the url address and search again
-                        url_dict["jump_to_record"] += url_dict["records_in_group"]
-                        url = self.BASE_URL.format(**url_dict)
-                        #print(f"url = {url}")
+                    # if citations > 0:
+                    #     there_is_more = True
+                    #     # add +jr to the rg keyword in the url address and search again
+                    #     url_dict["jump_to_record"] += url_dict["records_in_group"]
+                    #     url = self.BASE_URL.format(**url_dict)
+                    #     #print(f"url = {url}")
                     else:
                         there_is_more = False
 
