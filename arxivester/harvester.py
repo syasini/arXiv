@@ -144,6 +144,8 @@ class Paper:
         # make a dataframe for storing all the harvested papers
         self.pile = pd.DataFrame(columns=self.field)
 
+        self.inSPIREd = False
+
     @property
     def n_count(self):
         return len(self.pile.index)
@@ -520,6 +522,9 @@ class inSPIRE:
         # count the number of times unknown error occurs
         # this will be used later to sleep off unexpected errors
         self.error_counter = 0
+
+        # add a tag to the paper to indicate that citations have been scraped
+        self.paper.inSPIREd = True
 
     def get_citations(self):
         """get all citations for records in the paper.pile"""
