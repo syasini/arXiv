@@ -72,7 +72,30 @@ class Paper:
                  fields="everything"):
 
         # find the available set_specs
-        self.setspec_dict = self.get_setspecs()
+        self.setspec_list = ['cs',
+                             'econ',
+                             'eess',
+                             'math',
+                             'physics',
+                             'physics:astro-ph',
+                             'physics:cond-mat',
+                             'physics:gr-qc',
+                             'physics:hep-ex',
+                             'physics:hep-lat',
+                             'physics:hep-ph',
+                             'physics:hep-th',
+                             'physics:math-ph',
+                             'physics:nlin',
+                             'physics:nucl-ex',
+                             'physics:nucl-th',
+                             'physics:physics',
+                             'physics:quant-ph',
+                             'q-bio',
+                             'q-fin',
+                             'stat']
+
+        # uncomment this to scrape this list from arXiv
+        #self.setspec_list = self.get_setspecs()
 
         # check the from_ date
         if from_ is None:
@@ -87,9 +110,9 @@ class Paper:
             self.to_ = self.check_date_format(to_)
 
         # check the main category setSpec
-        if set_ not in self.setspec_dict:
+        if set_ not in self.setspec_list:
             raise ValueError("Please select one of the following values for set_\n\n{}".format(
-                self.setspec_dict))
+                self.setspec_list))
         else:
             self.set_ = set_
 
