@@ -99,13 +99,13 @@ class Paper:
 
         # check the from_ date
         if from_ is None:
-            self.from_ = self.days_back(1)
+            self.from_ = self.days_back(0)
         else:
             self.from_ = self.check_date_format(from_)
 
         # check the to_ date
         if to_ is None:
-            self.to_ = self.days_back(0)
+            self.to_ = self.days_back(-1)
         else:
             self.to_ = self.check_date_format(to_)
 
