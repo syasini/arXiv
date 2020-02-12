@@ -5,6 +5,8 @@ A parallel scraper designed for scraping arXiv and inspirehep records
 __author__ = "Siavash Yasini, Amin Oji"
 __email__ = "siavash.yasini@gmail.com"
 
+import os
+
 import requests
 import re
 from time import sleep
@@ -172,7 +174,7 @@ class Paper:
 
     def get_file_name(self):
         """return the default file name for the pile"""
-        fname = f"set={self.set_}-from={self.from_}-to={self.to_}.csv"
+        fname = f"set={self.set_}_from={self.from_}_to={self.to_}.csv"
         return fname
 
     @staticmethod
@@ -201,25 +203,38 @@ class Paper:
         except KeyError:
             pass
 
-    def save_to_file(self, filename=None, mode="csv"):
+    def save_to_csv(self, filename=None, dirname="."):
         """save the paper pile into a file"""
         if filename is None:
             filename = self.get_file_name()
-        if mode == "csv":
-            self.pile.to_csv(filename)
-            print(f"pile saved to \n{filename}")
-        else:
-            print("other file modes are not implemented at the moment.")
 
-    def load_from_file(self, filename=None, mode="csv"):
+        # remove the extension
+        if filename.endswith(".csv"):
+            filename = filename[:-4]
+
+        # if citations have been scraped, add a tag to the end of the file name
+        if self.inSPIREd:
+            filename += "_inSPIREd"
+
+        # create the directory if it doesn't exist
+        if not os.path.exists(dirname):
+            os.makedirs(dirname)
+
+        filename += ".csv"
+        filename = os.path.join(dirname, filename)
+
+        self.pile.to_csv(filename)
+        print(f"pile saved to \n{filename}")
+
+    def load_from_csv(self, filename=None, dirname="."):
         """load the paper pile from a file"""
         if filename is None:
             filename = self.get_file_name()
-        if mode == "csv":
-            self.pile = pd.read_csv(filename, index_col=0)
-            print(f"pile loaded from \n{filename}")
-        else:
-            print("other file modes are not implemented at the moment.")
+
+        filename = os.path.join(dirname, filename)
+
+        self.pile = pd.read_csv(filename, index_col=0)
+        print(f"pile loaded from \n{filename}")
 
 
 ###################################################
