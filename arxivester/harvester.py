@@ -5,7 +5,7 @@ A parallel scraper designed for scraping arXiv and inspirehep records
 
 import contextlib
 
-__author__ = "Siavash Yasini, Amin Oji"
+__author__ = "Siavash Yasini, Amin Oji, Siddhant Sadangi"
 __email__ = "siavash.yasini@gmail.com"
 
 import os
