@@ -2,7 +2,10 @@
 A parallel scraper designed for scraping arXiv and inspirehep records
 """
 
-__author__ = "Siavash Yasini, Amin Oji"
+
+import contextlib
+
+__author__ = "Siavash Yasini, Amin Oji, Siddhant Sadangi"
 __email__ = "siavash.yasini@gmail.com"
 
 import os
@@ -29,6 +32,7 @@ tqdm.pandas()
 ###################################################
 #                     Paper
 ###################################################
+
 
 class Paper:
     """Paper object contains the information of an individual record
@@ -64,40 +68,40 @@ class Paper:
     -------
 
     """
+
     def __repr__(self):
         return f"Papers from {self.from_} to {self.to_} in the {self.set_} category"
 
-    def __init__(self,
-                 from_=None,
-                 to_=None,
-                 set_="physics:astro-ph",
-                 fields="everything"):
-
+    def __init__(
+        self, from_=None, to_=None, set_="physics:astro-ph", fields="everything"
+    ):
         # find the available set_specs
-        self.setspec_list = ['cs',
-                             'econ',
-                             'eess',
-                             'math',
-                             'physics',
-                             'physics:astro-ph',
-                             'physics:cond-mat',
-                             'physics:gr-qc',
-                             'physics:hep-ex',
-                             'physics:hep-lat',
-                             'physics:hep-ph',
-                             'physics:hep-th',
-                             'physics:math-ph',
-                             'physics:nlin',
-                             'physics:nucl-ex',
-                             'physics:nucl-th',
-                             'physics:physics',
-                             'physics:quant-ph',
-                             'q-bio',
-                             'q-fin',
-                             'stat']
+        self.setspec_list = [
+            "cs",
+            "econ",
+            "eess",
+            "math",
+            "physics",
+            "physics:astro-ph",
+            "physics:cond-mat",
+            "physics:gr-qc",
+            "physics:hep-ex",
+            "physics:hep-lat",
+            "physics:hep-ph",
+            "physics:hep-th",
+            "physics:math-ph",
+            "physics:nlin",
+            "physics:nucl-ex",
+            "physics:nucl-th",
+            "physics:physics",
+            "physics:quant-ph",
+            "q-bio",
+            "q-fin",
+            "stat",
+        ]
 
         # uncomment this to scrape this list from arXiv
-        #self.setspec_list = self.get_setspecs()
+        # self.setspec_list = self.get_setspecs()
 
         # check the from_ date
         if from_ is None:
@@ -106,31 +110,28 @@ class Paper:
             self.from_ = self.check_date_format(from_)
 
         # check the to_ date
-        if to_ is None:
-            self.to_ = self.days_back(-1)
-        else:
-            self.to_ = self.check_date_format(to_)
-
+        self.to_ = self.days_back(-1) if to_ is None else self.check_date_format(to_)
         # check the main category setSpec
         if set_ not in self.setspec_list:
-            raise ValueError("Please select one of the following values for set_\n\n{}".format(
-                self.setspec_list))
+            raise ValueError(
+                f"Please select one of the following values for set_\n\n{self.setspec_list}"
+            )
         else:
             self.set_ = set_
 
         self.template = [
-                        "id",
-                        "title",
-                        "abstract",
-                        "author",
-                        "setSpec",
-                        "categories",
-                        "created",
-                        "updated",
-                        "comments",
-                        "doi",
-                        "datestamp",
-                         ]
+            "id",
+            "title",
+            "abstract",
+            "author",
+            "setSpec",
+            "categories",
+            "created",
+            "updated",
+            "comments",
+            "doi",
+            "datestamp",
+        ]
 
         # set the fields (columns) for the dataframe
         if fields == "everything":
@@ -149,10 +150,10 @@ class Paper:
         self.inSPIREd = False
 
     @property
-    def n_count(self):
+    def n_count(self) -> int:
         return len(self.pile.index)
 
-    def get_setspecs(self):
+    def get_setspecs(self) -> list:
         """get all the available setSpecs from arXiv"""
 
         response = requests.get("http://export.arxiv.org/oai2?verb=ListSets")
@@ -164,21 +165,20 @@ class Paper:
         return setspecs
 
     @staticmethod
-    def days_back(i):
+    def days_back(i: int) -> str:
         """return the date for i days back
         i=0 : today
         i=1: yesterday
         """
-        yesterday = (datetime.now() - timedelta(i))
-        return yesterday.strftime('%Y-%m-%d')
+        yesterday = datetime.now() - timedelta(i)
+        return yesterday.strftime("%Y-%m-%d")
 
-    def get_file_name(self):
+    def get_file_name(self) -> str:
         """return the default file name for the pile"""
-        fname = f"set={self.set_}_from={self.from_}_to={self.to_}.csv"
-        return fname
+        return f"set={self.set_}_from={self.from_}_to={self.to_}.csv"
 
     @staticmethod
-    def check_date_format(date):
+    def check_date_format(date) -> str:
         """check the format of the date to ensure its validity"""
         try:
             date = parsedate(date)
@@ -188,22 +188,22 @@ class Paper:
             print("the input date must be in YYYY-mm-dd format")
             raise
 
-    def process(self):
+    def process(self) -> None:
         """post process some of the columns in the pile
         1) convert dates to datetime datatype
         2) count the number of authors
         3) split sub-categories into list of items
         """
-        try:
+        with contextlib.suppress(KeyError):
             self.pile["created"] = pd.to_datetime(self.pile["created"])
             self.pile["updated"] = pd.to_datetime(self.pile["updated"])
             self.pile["datestamp"] = pd.to_datetime(self.pile["datestamp"])
             self.pile["n_authors"] = self.pile["author"].map(len)
-            self.pile["categories"] = self.pile["categories"].apply(lambda x: x.split(" "))
-        except KeyError:
-            pass
+            self.pile["categories"] = self.pile["categories"].apply(
+                lambda x: x.split(" ")
+            )
 
-    def save_to_csv(self, filename=None, dirname="."):
+    def save_to_csv(self, filename: str = None, dirname: str = ".") -> None:
         """save the paper pile into a file"""
         if filename is None:
             filename = self.get_file_name()
@@ -226,7 +226,7 @@ class Paper:
         self.pile.to_csv(filename)
         print(f"pile saved to \n{filename}")
 
-    def load_from_csv(self, filename=None, dirname="."):
+    def load_from_csv(self, filename: str = None, dirname: str = ".") -> None:
         """load the paper pile from a file"""
         if filename is None:
             filename = self.get_file_name()
@@ -240,6 +240,7 @@ class Paper:
 ###################################################
 #                     Skimmer
 ###################################################
+
 
 class Skimmer:
     """
@@ -256,19 +257,20 @@ class Skimmer:
         an instance of the Paper class
 
     """
-    def __init__(self,
-                 paper,
-                 ):
 
+    def __init__(
+        self,
+        paper,
+    ):
         self.pot = []
         self.bowls = []
         self.paper = paper
 
-    def add_to_pot(self, soup):
+    def add_to_pot(self, soup) -> None:
         """add new soup (single xml file) to the pot (list of xml files)"""
         self.pot.append(soup)
 
-    def scoop(self):
+    def scoop(self) -> None:
         """go through the pot and extract the records"""
 
         print(len(self.pot))
@@ -280,15 +282,15 @@ class Skimmer:
         # flatten the list of bowls
         # NOTE: all the initial bowls must be lists
         self.bowls = list(chain.from_iterable(self.bowls))
-        print("bowls = {}".format(len(self.bowls)))
+        print(f"bowls = {len(self.bowls)}")
 
     @staticmethod
-    def find(bowl, keyword):
+    def find(bowl, keyword: str) -> list:
         """find keyword in the soup bowl and return the relevant text"""
         keywords = bowl.find_all(keyword)
         return [item.get_text(" ", strip=True) for item in keywords]
 
-    def skim(self, paper):
+    def skim(self, paper) -> None:
         """skim each bowl and extract only the relevant info for each paper
         record the info in the paper.pile"""
 
@@ -309,12 +311,13 @@ class Skimmer:
                 paper.single.at[0, column] = ingredient
 
             # add the record info to the paper.pile
-            paper.pile = paper.pile.append(paper.single, ignore_index=True)
+            paper.pile = pd.concat([paper.pile, paper.single], ignore_index=True)
 
 
 ###################################################
 #                     arXiv
 ###################################################
+
 
 class arXiv:
     """Scraper object downloads and decodes the records based on user request
@@ -350,10 +353,10 @@ class arXiv:
     BASE_URL = "http://export.arxiv.org/oai2?verb=ListRecords&"
     METADATAPREFIX = "arXiv"  # link to the arXiv help page
 
-    def __init__(self,
-                 paper,
-                 ):
-
+    def __init__(
+        self,
+        paper,
+    ):
         self.from_ = paper.from_
         self.to_ = paper.to_
         self.set_ = paper.set_
@@ -364,10 +367,12 @@ class arXiv:
             "from": self.from_,
             "to": self.to_,
             "set": self.set_,
-            }
+        }
 
-        self.url = "{base_url}from={from}&until={to}&metadataPrefix={metadataprefix}&set={" \
-              "set}".format(**self.url_dict)
+        self.url = (
+            "{base_url}from={from}&until={to}&metadataPrefix={metadataprefix}&set={"
+            "set}".format(**self.url_dict)
+        )
 
         self.token = None
         self.resume_url = self.url
@@ -386,18 +391,19 @@ class arXiv:
         self.skimmer.skim(self.paper)
         self.paper.process()
 
-    def harvest(self):
+    def harvest(self) -> None:
         """
         Request records from url and pass through the skimmer object
         """
-        print(f"requesting records from {self.from_} to {self.to_} in the {self.set_} category\n")
+        print(
+            f"requesting records from {self.from_} to {self.to_} in the {self.set_} category\n"
+        )
 
         there_is_more = True
         while there_is_more:
-
             try:
                 print(f"request url: {self.resume_url}\n")
-                #pdb.set_trace()
+                # pdb.set_trace()
                 # get contents from resume_url
                 response = requests.get(self.resume_url)
                 print(f"response ok? : {response.ok}\n")
@@ -406,9 +412,9 @@ class arXiv:
                 if response.ok:
                     soup = self.make_soup(response)
 
-                    #TODO: search soup for error
+                    # TODO: search soup for error
 
-                    #TODO: apply pool on pandas dataframe?
+                    # TODO: apply pool on pandas dataframe?
 
                     self.skimmer.add_to_pot(soup)
 
@@ -416,13 +422,13 @@ class arXiv:
                     token = self.check_for_token(soup)
                     # if tokens found, add then to BASE_URL and continue downloading records
                     if token is not None:
-                        self.resume_url = self.BASE_URL + "resumptionToken={}".format(token.text)
+                        self.resume_url = (
+                            self.BASE_URL + f"resumptionToken={token.text}"
+                        )
                     else:
                         there_is_more = False
-                # if received a 503 error, sleep for the amount indicated in the error
                 elif response.status_code == 503:
                     self.sleep_off_503(response.text)
-                # if response was not "ok", print the message
                 else:
                     print(f"response.text = {response.text}")
                     self.cool_off()
@@ -436,16 +442,14 @@ class arXiv:
     def make_soup(response):
         """make beautifulsoup with the url response"""
 
-        soup = BeautifulSoup(response.text, "xml")
-
-        return soup
+        return BeautifulSoup(response.text, "xml")
 
     @staticmethod
     def check_for_token(soup):
         """check the soup for resumption token"""
 
         try:
-            token = soup.find('ListRecords').find("resumptionToken")
+            token = soup.find("ListRecords").find("resumptionToken")
             print("token=", token.text)
             return token
         except AttributeError:
@@ -454,7 +458,7 @@ class arXiv:
             return None
 
     @staticmethod
-    def sleep_off_503(text):
+    def sleep_off_503(text: str) -> None:
         """sleep for the amount indicated in the text"""
 
         error_pattern = "[\s\S]*?Retry after (\d+) seconds[\s\S]*"
@@ -464,7 +468,7 @@ class arXiv:
         print(f"sleeping for {t} seconds...\n")
         sleep(t)
 
-    def cool_off(self):
+    def cool_off(self) -> None:
         """sleep for a while and hope the error will go away..."""
 
         self.error_counter += 1
@@ -472,9 +476,11 @@ class arXiv:
         print(f"sleeping for {t} seconds...\n")
         sleep(t)
 
+
 ###################################################
 #                     inSPIRE
 ###################################################
+
 
 class inSPIRE:
     """Scraper object for extracting citations from inSPIRE
@@ -494,31 +500,34 @@ class inSPIRE:
 
 
     """
+
     timer = 0  # counter for occasional printouts
     # api instructions: http://inspirehep.net/info/hep/api
-    BASE_URL = "http://inspirehep.net/search?p=" \
-               "refersto:{arxiv_id}&" \
-               "of={output_format}&" \
-               "rg={records_in_group}&" \
-               "jrec={jump_to_record}"
+    BASE_URL = (
+        "http://inspirehep.net/search?p="
+        "refersto:{arxiv_id}&"
+        "of={output_format}&"
+        "rg={records_in_group}&"
+        "jrec={jump_to_record}"
+    )
 
-    #TODO: Add pbar and timer here?
+    # TODO: Add pbar and timer here?
 
-    def __init__(self,
-                 paper,
-                 output_format="hx",
-                 records_in_group=250,
-                 jump_to_record=1,
-                 n_chunks=-1,
-                 verbose=False,
-                 ):
-
+    def __init__(
+        self,
+        paper,
+        output_format="hx",
+        records_in_group=250,
+        jump_to_record=1,
+        n_chunks=-1,
+        verbose=False,
+    ):
         self.paper = paper
         self.n_chunks = n_chunks
         if self.n_chunks == -1:
             self.n_chunks = cpu_count()
 
-        #self.pbar = tqdm(total=100)
+        # self.pbar = tqdm(total=100)
         self.verbose = verbose
 
         self.url_dict = {
@@ -527,10 +536,10 @@ class inSPIRE:
             "output_format": output_format,
             "records_in_group": records_in_group,
             "jump_to_record": jump_to_record,
-            }
+        }
 
-        #with tqdm(total=self.paper.n_count) as pbar:
-            #self.pbar = pbar
+        # with tqdm(total=self.paper.n_count) as pbar:
+        # self.pbar = pbar
 
         self.get_citations()
 
@@ -541,15 +550,15 @@ class inSPIRE:
         # add a tag to the paper to indicate that citations have been scraped
         self.paper.inSPIREd = True
 
-    def get_citations(self):
+    def get_citations(self) -> None:
         """get all citations for records in the paper.pile"""
         print("Running....")
-        #self.pbar.update(1)
-        #self.timer += 1
+        # self.pbar.update(1)
+        # self.timer += 1
 
         with Pool(processes=self.n_chunks) as pool:
             pile_chunk = np.array_split(self.paper.pile, self.n_chunks)
-            print("Splitting the data into {} chunks...\n".format(len(pile_chunk)))
+            print(f"Splitting the data into {len(pile_chunk)} chunks...\n")
             n_citations = pool.map(self._harvest_chunk_citations, pile_chunk)
             n_citations = pd.concat(n_citations)
 
@@ -564,21 +573,20 @@ class inSPIRE:
     @staticmethod
     def _make_soup(response):
         """make beautifulsoup with the url response"""
-        soup = BeautifulSoup(response.text, "xml")
-
-        return soup
+        return BeautifulSoup(response.text, "xml")
 
     @staticmethod
     def _count_citations_in(soup):
         """count the number of citations in the soup object"""
 
-        #citations = soup.find_all("pre")
-        citations = soup.find('td', class_="searchresultsboxheader",
-                                  align="center").strong.text
+        # citations = soup.find_all("pre")
+        citations = soup.find(
+            "td", class_="searchresultsboxheader", align="center"
+        ).strong.text
 
         return int(citations)
 
-    def harvest(self, record):
+    def harvest(self, record) -> int:
         """find all papers that refersto:%record['id'] on inSPIRE"""
         if inSPIRE.timer % 100 == 0:
             print(f"fetched citations for {self.timer} papers...")
@@ -593,10 +601,10 @@ class inSPIRE:
         # plug in the arxiv_id and update the request url address
         url_dict["arxiv_id"] = record["id"]
         url = self.BASE_URL.format(**url_dict)
-        #self.pbar.update(1)
+        # self.pbar.update(1)
         while there_is_more:
             try:
-                #print(url)
+                # print(url)
 
                 response = requests.get(url)
 
@@ -617,10 +625,12 @@ class inSPIRE:
                         logger.exception(f"something unexpected happened at {url}")
 
                     if self.verbose:
-                        print(f"got {tot_citations} citations (total={tot_citations}) for"
-                              f" {url_dict['arxiv_id']}")
+                        print(
+                            f"got {tot_citations} citations (total={tot_citations}) for"
+                            f" {url_dict['arxiv_id']}"
+                        )
 
-                    #tot_citations += citations
+                    # tot_citations += citations
 
                     # if citations found, add then to BASE_URL and continue downloading records
                     # if citations > 0:
@@ -632,9 +642,9 @@ class inSPIRE:
                     else:
                         there_is_more = False
 
-                #TODO: remove this
+                # TODO: remove this
                 # if received a 503 error, sleep for the amount indicated in the error
-                #elif response.status_code == 503:
+                # elif response.status_code == 503:
                 #    self.sleep_off_503(response.text)
                 # if response was not "ok", print the message
                 else:
@@ -648,13 +658,14 @@ class inSPIRE:
 
         return tot_citations
 
-    def cool_off(self):
+    def cool_off(self) -> None:
         """sleep for a while and hope the error will go away..."""
 
-        #self.error_counter += 1
+        # self.error_counter += 1
         t = 60
         print(f"sleeping for {t} seconds...\n")
         sleep(t)
+
 
 if __name__ == "__main__":
     paper = Paper(set_="physics:astro-ph")
