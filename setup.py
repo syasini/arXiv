@@ -5,7 +5,7 @@ with open("requirements.txt", "r") as f:
 
 setup(
     name='arxivester',
-    version='0.1',
+    version='0.3',
     packages=['arxivester'],
     install_requires=reqs,
     url='https://github.com/syasini/arXiv',
